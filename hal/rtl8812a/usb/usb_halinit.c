@@ -133,11 +133,14 @@ void rtl8812au_interface_configure(_adapter *padapter)
 	pHalData->UsbTxAggDescNum	= 6;	// only 4 bits
 
 	if(IS_HARDWARE_TYPE_8812AU(padapter))    //page added for Jaguar
-		pHalData->UsbTxAggDescNum = 3;
+		pHalData->UsbTxAggDescNum	= 0x01 ; //adjust value for OQT  Overflow issue //0x3;	// only 4 bits
 #endif
 
 #ifdef CONFIG_USB_RX_AGGREGATION
-	pHalData->UsbRxAggMode		= USB_RX_AGG_DMA;// USB_RX_AGG_DMA;
+	if(IS_HARDWARE_TYPE_8812AU(padapter))
+		pHalData->UsbRxAggMode		= USB_RX_AGG_USB;
+	else
+		pHalData->UsbRxAggMode		= USB_RX_AGG_USB; //todo: change to USB_RX_AGG_DMA;
 	pHalData->UsbRxAggBlockCount	= 8; //unit : 512b
 	pHalData->UsbRxAggBlockTimeout	= 0x6;
 	pHalData->UsbRxAggPageCount	= 16; //uint :128 b //0x0A;	// 10 = MAX_RX_DMA_BUFFER_SIZE/2/pHalData->UsbBulkOutSize
@@ -147,8 +150,9 @@ void rtl8812au_interface_configure(_adapter *padapter)
 		pHalData->RegAcUsbDmaSize = 0x7;
 		pHalData->RegAcUsbDmaTime = 0x1a;
 	} else {
-		pHalData->RegAcUsbDmaSize = 0x6;
-		pHalData->RegAcUsbDmaTime = 0x10;
+		//the setting to reduce RX FIFO overflow on USB2.0 and increase rx throughput
+		pHalData->RegAcUsbDmaSize = 0x5;
+		pHalData->RegAcUsbDmaTime = 0x20;
 	}
 #endif
 
@@ -197,17 +201,14 @@ _InitBurstPktLen(IN PADAPTER Adapter)
 		{
 			pHalData->UsbBulkOutSize = USB_HIGH_SPEED_BULK_SIZE;
 			provalue = rtw_read8(Adapter, REG_RXDMA_PRO_8812);
-			rtw_write8(Adapter, REG_RXDMA_PRO_8812, ((provalue|BIT(4))&(~BIT(5)))); //set burst pkt len=512B
-			rtw_write16(Adapter, REG_RXDMA_PRO_8812, 0x1e);
+			rtw_write8(Adapter, REG_RXDMA_PRO_8812, ((provalue|BIT(4)|BIT(3)|BIT(2)|BIT(1))&(~BIT(5)))); //set burst pkt len=512B
 		}
 		else
 		{
 			pHalData->UsbBulkOutSize = 64;
 			provalue = rtw_read8(Adapter, REG_RXDMA_PRO_8812);
-			rtw_write8(Adapter, REG_RXDMA_PRO_8812, ((provalue|BIT(5))&(~BIT(4)))); //set burst pkt len=64B
+			rtw_write8(Adapter, REG_RXDMA_PRO_8812, ((provalue|BIT(5)|BIT(3)|BIT(2)|BIT(1))&(~BIT(4)))); //set burst pkt len=64B
 		}
-
-		//rtw_write16(Adapter, REG_RXDMA_AGG_PG_TH,0x2005); //dmc agg th 20K
 		
 		//rtw_write8(Adapter, 0x10c, 0xb4);
 		//hal_UphyUpdate8812AU(Adapter);
@@ -218,8 +219,7 @@ _InitBurstPktLen(IN PADAPTER Adapter)
 	{
 		pHalData->UsbBulkOutSize = USB_SUPER_SPEED_BULK_SIZE;
 		provalue = rtw_read8(Adapter, REG_RXDMA_PRO_8812);
-		rtw_write8(Adapter, REG_RXDMA_PRO_8812, provalue&(~(BIT5|BIT4))); //set burst pkt len=1k
-		rtw_write16(Adapter, REG_RXDMA_PRO_8812, 0x0e);
+		rtw_write8(Adapter, REG_RXDMA_PRO_8812, ((provalue|BIT(3)|BIT(2)|BIT(1))&(~(BIT5|BIT4)))); //set burst pkt len=1k
 		//PlatformEFIOWrite2Byte(Adapter, REG_RXDMA_AGG_PG_TH,0x0a05); //dmc agg th 20K
 		pHalData->bSupportUSB3 = _TRUE;
 
@@ -241,16 +241,16 @@ _InitBurstPktLen(IN PADAPTER Adapter)
 
 	rtw_write8(Adapter, REG_PIFS, 0x00);
 
-	//Suggention by SD1 Jong and Pisa, by Maddest 20130107.
 	if(IS_HARDWARE_TYPE_8821U(Adapter) && (Adapter->registrypriv.wifi_spec == _FALSE))
 	{
-		rtw_write16(Adapter, REG_MAX_AGGR_NUM, 0x0a0a);
+		//0x0a0a too small , it can't pass AC logo. change to 0x1f1f
+		rtw_write16(Adapter, REG_MAX_AGGR_NUM, 0x1f1f);
 		rtw_write8(Adapter, REG_FWHW_TXQ_CTRL, 0x80);
 		rtw_write32(Adapter, REG_FAST_EDCA_CTRL, 0x03087777);
 	}
 	else
 	{
-		rtw_write8(Adapter, REG_MAX_AGGR_NUM, 0x1f);
+		rtw_write16(Adapter, REG_MAX_AGGR_NUM, 0x1f1f);
 		rtw_write8(Adapter, REG_FWHW_TXQ_CTRL, rtw_read8(Adapter, REG_FWHW_TXQ_CTRL)&(~BIT(7)));
 	}
 
@@ -508,9 +508,9 @@ _InitTxBufferBoundary_8821AUsb(
 
 #ifdef CONFIG_CONCURRENT_MODE
 	rtw_write8(Adapter, REG_BCNQ1_BDNY, txpktbuf_bndy+8);
-	rtw_write8(Adapter, REG_TDECTRL1_8812+1, txpktbuf_bndy+8);//BCN1_HEAD
+	rtw_write8(Adapter, REG_DWBCN1_CTRL_8812+1, txpktbuf_bndy+8);//BCN1_HEAD
 	// BIT1- BIT_SW_BCN_SEL_EN
-	rtw_write8(Adapter, REG_TDECTRL1_8812+2, rtw_read8(Adapter, REG_TDECTRL1_8812+2)|BIT1);	
+	rtw_write8(Adapter, REG_DWBCN1_CTRL_8812+2, rtw_read8(Adapter, REG_DWBCN1_CTRL_8812+2)|BIT1);	
 #endif
 	
 }
@@ -556,9 +556,9 @@ _InitPageBoundary_8812AUsb(
 //	rxff_bndy = (Offset*256)-1;
 
 	if(IS_HARDWARE_TYPE_8812(Adapter))
-		rtw_write16(Adapter, (REG_TRXFF_BNDY + 2), MAX_RX_DMA_BUFFER_SIZE_8812-1);
+		rtw_write16(Adapter, (REG_TRXFF_BNDY + 2), RX_DMA_BOUNDARY_8812);
 	else 
-		rtw_write16(Adapter, (REG_TRXFF_BNDY + 2), MAX_RX_DMA_BUFFER_SIZE_8821-1);
+		rtw_write16(Adapter, (REG_TRXFF_BNDY + 2), RX_DMA_BOUNDARY_8821);
 	
 }
 
@@ -741,7 +741,7 @@ _InitWMACSetting_8812A(
 	)
 {
 	//u4Byte			value32;
-	//u16			value16;
+	u16			value16;
 	HAL_DATA_TYPE	*pHalData = GET_HAL_DATA(Adapter);
 
 	//pHalData->ReceiveConfig = AAP | APM | AM | AB | APP_ICV | ADF | AMF | APP_FCS | HTC_LOC_CTRL | APP_MIC | APP_PHYSTS;
@@ -774,8 +774,12 @@ _InitWMACSetting_8812A(
 	// 2010.09.08 hpfan
 	// Since ADF is removed from RCR, ps-poll will not be indicate to driver,
 	// RxFilterMap should mask ps-poll to gurantee AP mode can rx ps-poll.
-	//value16 = 0x400;
-	//rtw_write16(Adapter, REG_RXFLTMAP1, value16);
+	value16 = BIT10;
+#ifdef CONFIG_BEAMFORMING
+	// NDPA packet subtype is 0x0101
+	value16 |= BIT5;
+#endif
+	rtw_write16(Adapter, REG_RXFLTMAP1, value16);
 
 	// Accept all management frames
 	//value16 = 0xFFFF;
@@ -942,7 +946,9 @@ usb_AggSettingTxUpdate_8812A(
 		value32 = value32 & ~(BLK_DESC_NUM_MASK << BLK_DESC_NUM_SHIFT);
 		value32 |= ((pHalData->UsbTxAggDescNum & BLK_DESC_NUM_MASK) << BLK_DESC_NUM_SHIFT);
 		
-		rtw_write32(Adapter, REG_TDECTRL, value32);
+		rtw_write32(Adapter, REG_DWBCN0_CTRL_8812, value32);
+		if(IS_HARDWARE_TYPE_8821U(Adapter))    //page added for Jaguar
+			rtw_write8(Adapter, REG_DWBCN1_CTRL_8812, pHalData->UsbTxAggDescNum<<1);
 	}
 	
 #endif
@@ -975,13 +981,10 @@ usb_AggSettingRxUpdate_8812A(
 	u8			valueUSB;
 
 	valueDMA = rtw_read8(Adapter, REG_TRXDMA_CTRL);
-
 	switch(pHalData->UsbRxAggMode)
 	{
 		case USB_RX_AGG_DMA:
 			valueDMA |= RXDMA_AGG_EN;
-			
-			//rtw_write8(Adapter, REG_RXDMA_AGG_PG_TH, 0x05); //dma agg mode, 20k
 			//
 			// 2012/10/26 MH For TX throught start rate temp fix.
 			//
@@ -991,9 +994,20 @@ usb_AggSettingRxUpdate_8812A(
 				//Adjust DMA page and thresh.
 				temp = pHalData->RegAcUsbDmaSize | (pHalData->RegAcUsbDmaTime<<8);
 				rtw_write16(Adapter, REG_RXDMA_AGG_PG_TH, temp); 
+				rtw_write8(Adapter, REG_RXDMA_AGG_PG_TH+3, BIT(7)); //for dma agg , 0x280[31]¡GBIT_RXDMA_AGG_OLD_MOD, set 1
 			}
 			break;
 		case USB_RX_AGG_USB:
+			valueDMA |= RXDMA_AGG_EN;
+			{
+				u16			temp;
+
+				//Adjust DMA page and thresh.
+				temp = pHalData->RegAcUsbDmaSize | (pHalData->RegAcUsbDmaTime<<8);
+				rtw_write16(Adapter, REG_RXDMA_AGG_PG_TH, temp);
+			}
+			
+			break;
 		case USB_RX_AGG_MIX:
 		case USB_RX_AGG_DISABLE:
 		default:
@@ -1319,63 +1333,7 @@ HalDetectSelectiveSuspendMode(
 	}
 #endif
 }	// HalDetectSelectiveSuspendMode
-/*-----------------------------------------------------------------------------
- * Function:	HwSuspendModeEnable92Cu()
- *
- * Overview:	HW suspend mode switch.
- *
- * Input:		NONE
- *
- * Output:	NONE
- *
- * Return:	NONE
- *
- * Revised History:
- *	When		Who		Remark
- *	08/23/2010	MHC		HW suspend mode switch test..
- *---------------------------------------------------------------------------*/
-static VOID 
-HwSuspendModeEnable_8812AU(
-	IN	PADAPTER	pAdapter,
-	IN	u8			Type
-	)
-{
-	//PRT_USB_DEVICE 		pDevice = GET_RT_USB_DEVICE(pAdapter);
-	u16	reg = rtw_read16(pAdapter, REG_GPIO_MUXCFG);	
 
-	//if (!pDevice->RegUsbSS)
-	{
-		return;
-	}
-
-	//
-	// 2010/08/23 MH According to Alfred's suggestion, we need to to prevent HW
-	// to enter suspend mode automatically. Otherwise, it will shut down major power 
-	// domain and 8051 will stop. When we try to enter selective suspend mode, we
-	// need to prevent HW to enter D2 mode aumotmatically. Another way, Host will
-	// issue a S10 signal to power domain. Then it will cleat SIC setting(from Yngli).
-	// We need to enable HW suspend mode when enter S3/S4 or disable. We need 
-	// to disable HW suspend mode for IPS/radio_off.
-	//
-	//RT_TRACE(COMP_RF, DBG_LOUD, ("HwSuspendModeEnable92Cu = %d\n", Type));
-	if (Type == _FALSE)
-	{
-		reg |= BIT14;
-		//RT_TRACE(COMP_RF, DBG_LOUD, ("REG_GPIO_MUXCFG = %x\n", reg));
-		rtw_write16(pAdapter, REG_GPIO_MUXCFG, reg);
-		reg |= BIT12;
-		//RT_TRACE(COMP_RF, DBG_LOUD, ("REG_GPIO_MUXCFG = %x\n", reg));
-		rtw_write16(pAdapter, REG_GPIO_MUXCFG, reg);
-	}
-	else
-	{
-		reg &= (~BIT12);
-		rtw_write16(pAdapter, REG_GPIO_MUXCFG, reg);
-		reg &= (~BIT14);
-		rtw_write16(pAdapter, REG_GPIO_MUXCFG, reg);
-	}
-	
-}	// HwSuspendModeEnable92Cu
 rt_rf_power_state RfOnOffDetect(IN	PADAPTER pAdapter )
 {
 	HAL_DATA_TYPE		*pHalData = GET_HAL_DATA(pAdapter);
@@ -1409,6 +1367,50 @@ void _ps_close_RF(_adapter *padapter){
 	//phy_SsPwrSwitch92CU(padapter, rf_off, 1);
 }
 
+
+/*	A lightweight deinit function	*/
+static void rtl8812au_hw_reset(_adapter *Adapter)
+{
+                u8 reg_val=0;
+	if(rtw_read8(Adapter, REG_MCUFWDL)&BIT7)
+	{		
+		_8051Reset8812(Adapter);  
+		rtw_write8(Adapter, REG_MCUFWDL, 0x00);
+		//before BB reset should do clock gated
+		rtw_write32(Adapter, rFPGA0_XCD_RFPara, 
+			rtw_read32(Adapter, rFPGA0_XCD_RFPara)|(BIT6));
+		//reset BB
+		reg_val = rtw_read8(Adapter, REG_SYS_FUNC_EN);
+		reg_val &= ~(BIT(0) | BIT(1));
+		rtw_write8(Adapter, REG_SYS_FUNC_EN, reg_val);
+		//reset RF
+		rtw_write8(Adapter, REG_RF_CTRL, 0);
+		//reset TRX path
+		rtw_write16(Adapter, REG_CR, 0);
+		//reset MAC
+		reg_val = rtw_read8(Adapter, REG_APS_FSMCO+1); 
+		reg_val |= BIT(1);
+		reg_val = rtw_write8(Adapter, REG_APS_FSMCO+1, reg_val);       //reg0x5[1] ,auto FSM off
+
+		reg_val = rtw_read8(Adapter, REG_APS_FSMCO+1);
+ 
+		//check if   reg0x5[1] auto cleared
+		while(reg_val & BIT(1)){
+			rtw_udelay_os(1);
+			reg_val = rtw_read8(Adapter, REG_APS_FSMCO+1); 
+		}
+		reg_val |= BIT(0);
+		reg_val = rtw_write8(Adapter, REG_APS_FSMCO+1, reg_val);     //reg0x5[0] ,auto FSM on
+
+		reg_val = rtw_read8(Adapter, REG_SYS_FUNC_EN+1);
+		reg_val &= ~(BIT(4) | BIT(7));
+		rtw_write8(Adapter, REG_SYS_FUNC_EN+1, reg_val);
+		reg_val = rtw_read8(Adapter, REG_SYS_FUNC_EN+1);
+		reg_val |= BIT(4) | BIT(7);
+		rtw_write8(Adapter, REG_SYS_FUNC_EN+1, reg_val);
+	}
+}
+
 u32 rtl8812au_hal_init(PADAPTER Adapter)
 {
 	u8	value8 = 0, u1bRegCR;
@@ -1420,9 +1422,6 @@ u32 rtl8812au_hal_init(PADAPTER Adapter)
 	struct registry_priv	*pregistrypriv = &Adapter->registrypriv;
 	
 	rt_rf_power_state		eRfPowerStateToSet;
-#ifdef CONFIG_BT_COEXIST
-	struct btcoexist_priv	*pbtpriv = &(pHalData->bt_coexist);
-#endif
 
 	u32 init_start_time = rtw_get_current_time();
 
@@ -1550,6 +1549,15 @@ HAL_INIT_PROFILE_TAG(HAL_INIT_STAGES_BEGIN);
 		rtw_write8(Adapter, REG_RF_B_CTRL_8812, 5);
 		rtw_write8(Adapter, REG_RF_B_CTRL_8812, 7);
 	}
+
+/*
+	If HW didn't go through a complete de-initial procedure,  
+	it probably occurs some problem for double initial procedure.
+	Like "CONFIG_DEINIT_BEFORE_INIT" in 92du chip
+*/
+	rtl8812au_hw_reset(Adapter);
+
+
 
 HAL_INIT_PROFILE_TAG(HAL_INIT_STAGES_INIT_PW_ON);
 	status = _InitPowerOn_8812AU(Adapter);
@@ -1753,7 +1761,15 @@ HAL_INIT_PROFILE_TAG(HAL_INIT_STAGES_MISC11);
 
 	if(pregistrypriv->wifi_spec)
 		rtw_write16(Adapter,REG_FAST_EDCA_CTRL ,0);
-
+	//adjust EDCCA to avoid collision
+	if(pregistrypriv->wifi_spec)
+	{
+		if (IS_HARDWARE_TYPE_8821(Adapter))
+			if (Adapter->registrypriv.adaptivity_en == 0) {
+				Adapter->registrypriv.adaptivity_en = 1;
+				Adapter->registrypriv.adaptivity_mode = 0;
+			}
+	}
 	//Nav limit , suggest by scott
 	rtw_write8(Adapter, 0x652, 0x0);
 
@@ -1926,11 +1942,21 @@ HAL_INIT_PROFILE_TAG(HAL_INIT_STAGES_MISC21);
 #ifdef CONFIG_BT_COEXIST
 HAL_INIT_PROFILE_TAG(HAL_INIT_STAGES_BT_COEXIST);
 	//_InitBTCoexist(Adapter);
-#endif
-
 	// 2010/08/23 MH According to Alfred's suggestion, we need to to prevent HW enter
 	// suspend mode automatically.
 	//HwSuspendModeEnable92Cu(Adapter, _FALSE);
+
+	if ( _TRUE == pHalData->EEPROMBluetoothCoexist)
+        {
+               // Init BT hw config.
+                rtw_btcoex_HAL_Initialize(Adapter, _FALSE);      
+        }
+        else
+        {
+                // In combo card run wifi only , must setting some hardware reg.
+                rtl8812a_combo_card_WifiOnlyHwInit(Adapter);
+        }
+#endif //CONFIG_BT_COEXIST
 
 HAL_INIT_PROFILE_TAG(HAL_INIT_STAGES_MISC31);
 
@@ -1989,11 +2015,14 @@ hal_poweroff_8812au(
 {
 	u8	u1bTmp;
 	u8 bMacPwrCtrlOn = _FALSE;
+	u16 	utemp, ori_fsmc0;
 
 	rtw_hal_get_hwreg(Adapter, HW_VAR_APFM_ON_MAC, &bMacPwrCtrlOn);
 	if(bMacPwrCtrlOn == _FALSE)	
 		return ;
-	
+
+	ori_fsmc0 = utemp = rtw_read16(Adapter, REG_APS_FSMCO);
+	rtw_write16(Adapter, REG_APS_FSMCO, utemp & ~0x8000);	
 	DBG_871X(" %s\n",__FUNCTION__);
 
 	//Stop Tx Report Timer. 0x4EC[Bit1]=b'0
@@ -2030,7 +2059,11 @@ hal_poweroff_8812au(
 
 	bMacPwrCtrlOn = _FALSE;
 	rtw_hal_set_hwreg(Adapter, HW_VAR_APFM_ON_MAC, &bMacPwrCtrlOn);
-	
+
+	if (ori_fsmc0 & 0x8000) {
+		utemp = rtw_read16(Adapter, REG_APS_FSMCO);
+		rtw_write16(Adapter, REG_APS_FSMCO, utemp | 0x8000);
+	}
 }
 
 static void rtl8812au_hw_power_down(_adapter *padapter)
@@ -2050,7 +2083,7 @@ u32 rtl8812au_hal_deinit(PADAPTER Adapter)
    	DBG_8192C("==> %s \n",__FUNCTION__);
 
 #ifdef CONFIG_BT_COEXIST
-	if (BT_IsBtExist(Adapter))
+	if (hal_btcoex_IsBtExist(Adapter))
 	{
 		DBG_871X("BT module enable SIC\n");
 		// Only under WIN7 we can support selective suspend and enter D3 state when system call halt adapter.
@@ -2060,7 +2093,7 @@ u32 rtl8812au_hal_deinit(PADAPTER Adapter)
 		// the system will hang due to 8051 reset fail.
 	}
 	else
-#endif
+#endif //CONFIG_BT_COEXIST
 	{
 		rtw_write16(Adapter, REG_GPIO_MUXCFG, rtw_read16(Adapter, REG_GPIO_MUXCFG)&(~BIT12));
 	}
@@ -2543,13 +2576,47 @@ InitAdapterVariablesByPROM_8812AU(
 	)
 {
 	EEPROM_EFUSE_PRIV *pEEPROM = GET_EEPROM_EFUSE_PRIV(Adapter);
+#ifdef CONFIG_EFUSE_CONFIG_FILE
+	struct file *fp;
+#endif //CONFIG_EFUSE_CONFIG_FILE	
 
+#ifdef CONFIG_EFUSE_CONFIG_FILE
+	if (check_phy_efuse_tx_power_info_valid(Adapter) == _FALSE) {
+		fp = filp_open(EFUSE_MAP_PATH, O_RDONLY, 0);
+		if (fp == NULL || IS_ERR(fp)) {
+			DBG_871X("[WARNING] invalid phy efuse and no efuse file, use driver default!!\n");
+		} else {
+			Hal_readPGDataFromConfigFile(Adapter, fp);
+			filp_close(fp, NULL);
+		}
+	}	
+#else
 	hal_InitPGData_8812A(Adapter, pEEPROM->efuse_eeprom_data);
+#endif //CONFIG_EFUSE_CONFIG_FILE
+
 	Hal_EfuseParseIDCode8812A(Adapter, pEEPROM->efuse_eeprom_data);
 	
 	Hal_ReadPROMVersion8812A(Adapter, pEEPROM->efuse_eeprom_data, pEEPROM->bautoload_fail_flag);
 	hal_ReadIDs_8812AU(Adapter, pEEPROM->efuse_eeprom_data, pEEPROM->bautoload_fail_flag);
-	hal_ReadMACAddress_8812AU(Adapter, pEEPROM->efuse_eeprom_data, pEEPROM->bautoload_fail_flag);	
+	
+#ifdef CONFIG_EFUSE_CONFIG_FILE
+	if (check_phy_efuse_macaddr_info_valid(Adapter) == _TRUE) {
+		DBG_871X("using phy efuse mac\n");
+		Hal_GetPhyEfuseMACAddr(Adapter, pEEPROM->mac_addr);
+	} else {
+		fp = filp_open(WIFIMAC_PATH, O_RDONLY, 0);
+		if (fp == NULL || IS_ERR(fp)) {
+			DBG_871X("wifimac does not exist!!\n");
+			Hal_GetPhyEfuseMACAddr(Adapter, pEEPROM->mac_addr);
+		} else {
+			Hal_ReadMACAddrFromFile(Adapter, fp);
+			filp_close(fp, NULL);
+		}
+	}
+#else
+	hal_ReadMACAddress_8812AU(Adapter, pEEPROM->efuse_eeprom_data, pEEPROM->bautoload_fail_flag);
+#endif //CONFIG_EFUSE_CONFIG_FILE
+
 	Hal_ReadTxPowerInfo8812A(Adapter, pEEPROM->efuse_eeprom_data, pEEPROM->bautoload_fail_flag);
 	Hal_ReadBoardType8812A(Adapter, pEEPROM->efuse_eeprom_data, pEEPROM->bautoload_fail_flag);
 
@@ -2561,6 +2628,7 @@ InitAdapterVariablesByPROM_8812AU(
 	Hal_ReadChannelPlan8812A(Adapter, pEEPROM->efuse_eeprom_data, pEEPROM->bautoload_fail_flag);
 	Hal_EfuseParseXtal_8812A(Adapter, pEEPROM->efuse_eeprom_data, pEEPROM->bautoload_fail_flag);	
 	Hal_ReadThermalMeter_8812A(Adapter, pEEPROM->efuse_eeprom_data, pEEPROM->bautoload_fail_flag);
+	Hal_ReadRemoteWakeup_8812A(Adapter, pEEPROM->efuse_eeprom_data, pEEPROM->bautoload_fail_flag);
 	Hal_ReadAntennaDiversity8812A(Adapter, pEEPROM->efuse_eeprom_data, pEEPROM->bautoload_fail_flag);
 
 	if(IS_HARDWARE_TYPE_8821U(Adapter))
@@ -2675,6 +2743,20 @@ void SetHwReg8812AU(PADAPTER Adapter, u8 variable, u8* val)
 	HAL_DATA_TYPE	*pHalData = GET_HAL_DATA(Adapter);
 	struct dm_priv	*pdmpriv = &pHalData->dmpriv;
 	DM_ODM_T 		*podmpriv = &pHalData->odmpriv;
+#if defined(CONFIG_WOWLAN) || defined(CONFIG_AP_WOWLAN) || defined(CONFIG_P2P_WOWLAN)
+	struct wowlan_ioctl_param *poidparam;
+	struct recv_buf *precvbuf;
+	struct pwrctrl_priv *pwrctl = adapter_to_pwrctl(Adapter);
+	struct mlme_priv	*pmlmepriv = &Adapter->mlmepriv;
+	struct sta_info *psta = NULL;
+	int res, i;
+	u32 tmp;
+	u16 len = 0;
+	u16 media_status_rpt;
+	u8 mstatus = (*(u8 *)val);
+	u8 trycnt = 100;
+	u8 data[4];
+#endif
 _func_enter_;
 
 	switch(variable)
@@ -2726,6 +2808,248 @@ _func_enter_;
 			//rtw_write8(Adapter, REG_CAL_TIMER+1, 0x3);
 			rtw_write8(Adapter, REG_APS_FSMCO+1, 0x80);
 			break;
+#ifdef CONFIG_AP_WOWLAN
+			if (pwrctl->wowlan_ap_mode == _TRUE)
+			{
+				u8	ps_state = *((u8 *)val);
+				DBG_871X("%s, RPWM\n", __func__);
+				//rpwm value only use BIT0(clock bit) ,BIT6(Ack bit), and BIT7(Toggle bit) for 88e.
+				//BIT0 value - 1: 32k, 0:40MHz.
+				//BIT6 value - 1: report cpwm value after success set, 0:do not report.
+				//BIT7 value - Toggle bit change.
+				//modify by Thomas. 2012/4/2.
+				ps_state = ps_state & 0xC1;
+				//DBG_871X("##### Change RPWM value to = %x for switch clk #####\n",ps_state);
+				rtw_write8(Adapter, REG_USB_HRPWM, ps_state);
+			}
+#endif
+			break;
+#ifdef CONFIG_WOWLAN_OLD
+		case HW_VAR_WOWLAN:
+			{
+			poidparam = (struct wowlan_ioctl_param *)val;
+			switch (poidparam->subcode){
+				case WOWLAN_ENABLE:
+					DBG_871X_LEVEL(_drv_always_, "WOWLAN_ENABLE\n");
+					SetFwRelatedForWoWLAN8812(Adapter, _TRUE);
+
+					//Set Pattern
+					//if(pwrctl->wowlan_pattern==_TRUE)
+					//	rtw_wowlan_reload_pattern(Adapter);
+
+					//RX DMA stop
+					DBG_871X_LEVEL(_drv_always_, "Pause DMA\n");
+					rtw_write32(Adapter,REG_RXPKT_NUM,(rtw_read32(Adapter,REG_RXPKT_NUM)|RW_RELEASE_EN));
+					do{
+						if((rtw_read32(Adapter, REG_RXPKT_NUM)&RXDMA_IDLE)) {
+							DBG_871X_LEVEL(_drv_always_, "RX_DMA_IDLE is true\n");
+							break;
+						} else {
+							// If RX_DMA is not idle, receive one pkt from DMA
+							DBG_871X_LEVEL(_drv_always_, "RX_DMA_IDLE is not true\n");
+						}
+					}while(trycnt--);
+					if(trycnt ==0)
+						DBG_871X_LEVEL(_drv_always_, "Stop RX DMA failed...... \n");
+
+					//Set WOWLAN H2C command.
+					DBG_871X_LEVEL(_drv_always_, "Set WOWLan cmd\n");
+					rtl8812_set_wowlan_cmd(Adapter, 1);
+
+					mstatus = rtw_read8(Adapter, REG_WOW_CTRL);
+					trycnt = 10;
+
+					while(!(mstatus&BIT1) && trycnt>1) {
+						mstatus = rtw_read8(Adapter, REG_WOW_CTRL);
+						DBG_871X_LEVEL(_drv_always_, "Loop index: %d :0x%02x\n", trycnt, mstatus);
+						trycnt --;
+						rtw_msleep_os(2);
+					}
+
+					pwrctl->wowlan_wake_reason = rtw_read8(Adapter, REG_MCUTST_WOWLAN);
+					DBG_871X_LEVEL(_drv_always_, "wowlan_wake_reason: 0x%02x\n",
+										pwrctl->wowlan_wake_reason);
+
+					if (Adapter->intf_stop)
+						Adapter->intf_stop(Adapter);
+
+					// Invoid SE0 reset signal during suspending
+					rtw_write8(Adapter, REG_RSV_CTRL, 0x20);
+					rtw_write8(Adapter, REG_RSV_CTRL, 0x60);
+					//rtw_msleep_os(10);
+					break;
+				case WOWLAN_DISABLE:
+					DBG_871X_LEVEL(_drv_always_, "WOWLAN_DISABLE\n");
+					trycnt = 10;
+					psta = rtw_get_stainfo(&Adapter->stapriv, get_bssid(pmlmepriv));
+					if (psta != NULL) {
+						media_status_rpt = (u16)((psta->mac_id<<8)|RT_MEDIA_DISCONNECT); //  MACID|OPMODE:0 disconnect
+						rtw_hal_set_hwreg(Adapter,HW_VAR_H2C_MEDIA_STATUS_RPT,(u8 *)&media_status_rpt);
+					}
+					// 1. Read wakeup reason
+					pwrctl->wowlan_wake_reason = rtw_read8(Adapter, REG_MCUTST_WOWLAN);
+					DBG_871X_LEVEL(_drv_always_, "wakeup_reason: 0x%02x, mac_630=0x%08x, mac_634=0x%08x, mac_1c0=0x%08x, mac_1c4=0x%08x"
+					", mac_494=0x%08x, , mac_498=0x%08x, mac_49c=0x%08x, mac_608=0x%08x, mac_4a0=0x%08x, mac_4a4=0x%08x\n"
+					", mac_1cc=0x%08x, mac_2f0=0x%08x, mac_2f4=0x%08x, mac_2f8=0x%08x, mac_2fc=0x%08x, mac_8c=0x%08x, mac_1a8=0x%08x"
+					, pwrctl->wowlan_wake_reason, rtw_read32(Adapter, 0x630), rtw_read32(Adapter, 0x634)
+					, rtw_read32(Adapter, 0x1c0), rtw_read32(Adapter, 0x1c4)
+					, rtw_read32(Adapter, 0x494), rtw_read32(Adapter, 0x498), rtw_read32(Adapter, 0x49c), rtw_read32(Adapter, 0x608)
+					, rtw_read32(Adapter, 0x4a0), rtw_read32(Adapter, 0x4a4)
+					, rtw_read32(Adapter, 0x1cc), rtw_read32(Adapter, 0x2f0), rtw_read32(Adapter, 0x2f4), rtw_read32(Adapter, 0x2f8)
+					, rtw_read32(Adapter, 0x2fc), rtw_read32(Adapter, 0x8c), rtw_read32(Adapter, 0x1a8));
+					
+					rtl8812_set_wowlan_cmd(Adapter, 0);
+					mstatus = rtw_read8(Adapter, REG_WOW_CTRL);
+					DBG_871X_LEVEL(_drv_info_, "%s mstatus:0x%02x\n", __func__, mstatus);
+
+					while(mstatus&BIT1 && trycnt>1) {
+						mstatus = rtw_read8(Adapter, REG_WOW_CTRL);
+						DBG_871X_LEVEL(_drv_always_, "Loop index: %d :0x%02x\n", trycnt, mstatus);
+						trycnt --;
+						rtw_msleep_os(2);
+					}
+
+					if (mstatus & BIT1)
+						printk("System did not release RX_DMA\n");
+					else
+						SetFwRelatedForWoWLAN8812(Adapter, _FALSE);
+
+					rtw_msleep_os(2);
+					if(!(pwrctl->wowlan_wake_reason & FWDecisionDisconnect))
+						rtl8812_set_FwJoinBssReport_cmd(Adapter, 1);
+					//rtw_msleep_os(10);
+
+					break;
+				default:
+					break;
+			}
+		}
+		break;
+#endif			
+#ifdef CONFIG_AP_WOWLAN
+		case HW_VAR_AP_WOWLAN:
+		{
+			poidparam = (struct wowlan_ioctl_param *)val;
+			switch (poidparam->subcode) {
+			case WOWLAN_AP_ENABLE:
+				DBG_871X("%s, WOWLAN_AP_ENABLE\n", __func__);
+				// 1. Download WOWLAN FW
+				DBG_871X_LEVEL(_drv_always_, "Re-download WoWlan FW!\n");
+#ifdef DBG_CHECK_FW_PS_STATE
+				if(rtw_fw_ps_state(Adapter) == _FAIL) {
+					pdbgpriv->dbg_enwow_dload_fw_fail_cnt++;
+					DBG_871X_LEVEL(_drv_always_, "wowlan enable no leave 32k\n");
+				}
+#endif //DBG_CHECK_FW_PS_STATE
+				do {
+					if (rtw_read8(Adapter, REG_HMETFR) == 0x00) {
+						DBG_871X_LEVEL(_drv_always_, "Ready to change FW.\n");
+						break;
+					}
+					rtw_msleep_os(10);
+					DBG_871X_LEVEL(_drv_always_, "trycnt: %d\n", (100-trycnt));
+				} while (trycnt--);
+
+				SetFwRelatedForWoWLAN8192E(Adapter, _TRUE);
+
+				// 2. RX DMA stop
+				DBG_871X_LEVEL(_drv_always_, "Pause DMA\n");
+				trycnt = 100;
+				rtw_write32(Adapter,REG_RXPKT_NUM,
+					(rtw_read32(Adapter,REG_RXPKT_NUM)|RW_RELEASE_EN));
+				do {
+					if ((rtw_read32(Adapter, REG_RXPKT_NUM)&RXDMA_IDLE)) {
+						DBG_871X_LEVEL(_drv_always_, "RX_DMA_IDLE is true\n");
+						if (Adapter->intf_stop)
+							Adapter->intf_stop(Adapter);
+						break;
+					} else {
+						// If RX_DMA is not idle, receive one pkt from DMA
+						DBG_871X_LEVEL(_drv_always_, "RX_DMA_IDLE is not true\n");
+					}
+				} while (trycnt--);
+
+				if (trycnt == 0)
+					DBG_871X_LEVEL(_drv_always_, "Stop RX DMA failed...... \n");
+
+				// 5. Set Enable WOWLAN H2C command.
+				DBG_871X_LEVEL(_drv_always_, "Set Enable AP WOWLan cmd\n");
+				rtl8192e_set_ap_wowlan_cmd(Adapter, 1);
+				// 6. add some delay for H2C cmd ready
+				rtw_msleep_os(10);
+				// 7. enable AP power save
+				rtl8192e_set_ap_ps_wowlan_cmd(Adapter, 1);
+
+				rtw_write8(Adapter, REG_MCUTST_WOWLAN, 0);
+
+				// Invoid SE0 reset signal during suspending
+				rtw_write8(Adapter, REG_RSV_CTRL, 0x20);
+				rtw_write8(Adapter, REG_RSV_CTRL, 0x60);
+				break;
+			case WOWLAN_AP_DISABLE:
+				DBG_871X("%s, WOWLAN_AP_DISABLE\n", __func__);
+				// 1. Read wakeup reason
+				pwrctl->wowlan_wake_reason =
+					rtw_read8(Adapter, REG_MCUTST_WOWLAN);
+
+				DBG_871X_LEVEL(_drv_always_, "wakeup_reason: 0x%02x\n",
+						pwrctl->wowlan_wake_reason);
+
+				// 2. diable AP power save
+				rtl8192e_set_ap_ps_wowlan_cmd(Adapter, 0);
+				// 3.  Set Disable WOWLAN H2C command.
+				DBG_871X_LEVEL(_drv_always_, "Set Disable WOWLan cmd\n");
+				rtl8192e_set_ap_wowlan_cmd(Adapter, 0);
+				// 6. add some delay for H2C cmd ready
+				rtw_msleep_os(2);
+#ifdef DBG_CHECK_FW_PS_STATE
+				if (rtw_fw_ps_state(Adapter) == _FAIL) {
+					pdbgpriv->dbg_diswow_dload_fw_fail_cnt++;
+					DBG_871X_LEVEL(_drv_always_, "wowlan enable no leave 32k\n");
+				}
+#endif //DBG_CHECK_FW_PS_STATE
+
+				DBG_871X_LEVEL(_drv_always_, "Release RXDMA\n");
+
+				rtw_write32(Adapter, REG_RXPKT_NUM,
+					(rtw_read32(Adapter,REG_RXPKT_NUM) & (~RW_RELEASE_EN)));
+
+				do {
+					if (rtw_read8(Adapter, REG_HMETFR) == 0x00) {
+						DBG_871X_LEVEL(_drv_always_, "Ready to change FW.\n");
+						break;
+					}
+					rtw_msleep_os(10);
+					DBG_871X_LEVEL(_drv_always_, "trycnt: %d\n", (100-trycnt));
+				} while (trycnt--);
+
+				SetFwRelatedForWoWLAN8192E(Adapter, _FALSE);
+#ifdef CONFIG_GPIO_WAKEUP
+				DBG_871X_LEVEL(_drv_always_, "Set Wake GPIO to high for default.\n");
+				HalSetOutPutGPIO(Adapter, WAKEUP_GPIO_IDX, 1);
+#endif
+
+#ifdef CONFIG_CONCURRENT_MODE
+				if (rtw_buddy_adapter_up(Adapter) == _TRUE &&
+					check_buddy_fwstate(Adapter, WIFI_AP_STATE) == _TRUE) {
+					rtl8192e_set_FwJoinBssReport_cmd(Adapter->pbuddy_adapter, RT_MEDIA_CONNECT);
+					issue_beacon(Adapter->pbuddy_adapter, 0);
+				} else {
+					rtl8192e_set_FwJoinBssReport_cmd(Adapter, RT_MEDIA_CONNECT);
+					issue_beacon(Adapter, 0);
+				}
+#else
+				rtl8192e_set_FwJoinBssReport_cmd(Adapter, RT_MEDIA_CONNECT);
+				issue_beacon(Adapter, 0);
+#endif
+
+				break;
+			default:
+				break;
+			}
+		}
+			break;
+#endif //CONFIG_AP_WOWLAN
 		default:
 			SetHwReg8812A(Adapter, variable, val);
 			break;
@@ -2897,25 +3221,11 @@ void rtl8812au_set_hal_ops(_adapter * padapter)
 
 _func_enter_;
 
-#ifdef CONFIG_CONCURRENT_MODE
-	if(padapter->isprimary)
-#endif //CONFIG_CONCURRENT_MODE
-	{
-		padapter->HalData = rtw_zmalloc(sizeof(HAL_DATA_TYPE));
-		if(padapter->HalData == NULL){
-			DBG_8192C("cant not alloc memory for HAL DATA \n");
-		}
-	}
-	//_rtw_memset(padapter->HalData, 0, sizeof(HAL_DATA_TYPE));
-	padapter->hal_data_sz = sizeof(HAL_DATA_TYPE);
-
 	pHalFunc->hal_power_on = _InitPowerOn_8812AU;
 	pHalFunc->hal_power_off = hal_poweroff_8812au;
 	
 	pHalFunc->hal_init = &rtl8812au_hal_init;
 	pHalFunc->hal_deinit = &rtl8812au_hal_deinit;
-
-	//pHalFunc->free_hal_data = &rtl8192c_free_hal_data;
 
 	pHalFunc->inirp_init = &rtl8812au_inirp_init;
 	pHalFunc->inirp_deinit = &rtl8812au_inirp_deinit;

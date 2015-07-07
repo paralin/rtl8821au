@@ -48,6 +48,7 @@
 #define WLAN_MIN_ETHFRM_LEN	60
 #define WLAN_MAX_ETHFRM_LEN	1514
 #define WLAN_ETHHDR_LEN		14
+#define WLAN_WMM_LEN		24
 
 #define P80211CAPTURE_VERSION	0x80211001
 
@@ -81,6 +82,7 @@ enum WIFI_FRAME_SUBTYPE {
     WIFI_AUTH           = (BIT(7) | BIT(5) | BIT(4) | WIFI_MGT_TYPE),
     WIFI_DEAUTH         = (BIT(7) | BIT(6) | WIFI_MGT_TYPE),
     WIFI_ACTION         = (BIT(7) | BIT(6) | BIT(4) | WIFI_MGT_TYPE),
+    WIFI_ACTION_NOACK = (BIT(7) | BIT(6) | BIT(5) | WIFI_MGT_TYPE),
 
     // below is for control frame
     WIFI_NDPA         = (BIT(6) | BIT(4) | WIFI_CTRL_TYPE),
@@ -168,6 +170,8 @@ enum WIFI_REASON_CODE	{
 enum WIFI_STATUS_CODE {
 	_STATS_SUCCESSFUL_			= 0,
 	_STATS_FAILURE_				= 1,
+	_STATS_SEC_DISABLED_			= 5,
+	_STATS_NOT_IN_SAME_BSS_		= 7,
 	_STATS_CAP_FAIL_			= 10,
 	_STATS_NO_ASOC_				= 11,
 	_STATS_OTHER_				= 12,
@@ -177,6 +181,9 @@ enum WIFI_STATUS_CODE {
 	_STATS_AUTH_TIMEOUT_		= 16,
 	_STATS_UNABLE_HANDLE_STA_	= 17,
 	_STATS_RATE_FAIL_			= 18,
+	_STATS_DECLINE_REQ_			= 37,
+	_STATS_INVALID_PARAMETERS_	= 38,
+	_STATS_INVALID_RSNIE_			= 72,
 };
 
 /* Status codes (IEEE 802.11-2007, 7.3.1.9, Table 7-23) */
@@ -499,7 +506,7 @@ __inline static unsigned char * get_sa(unsigned char *pframe)
 
 __inline static unsigned char * get_hdr_bssid(unsigned char *pframe)
 {
-	unsigned char 	*sa;
+	unsigned char 	*sa = NULL;
 	unsigned int	to_fr_ds	= (GetToDs(pframe) << 1) | GetFrDs(pframe);
 
 	switch (to_fr_ds) {
@@ -514,9 +521,6 @@ __inline static unsigned char * get_hdr_bssid(unsigned char *pframe)
 			break;
 		case 0x03:	// ToDs=1, FromDs=1
 			sa = GetAddr1Ptr(pframe);
-			break;
-		default:	
-			sa =NULL; //???????
 			break;
 	}
 
@@ -744,6 +748,7 @@ typedef	enum _ELEMENT_ID{
 
 #define GetOrderBit(pbuf)	(((*(unsigned short *)(pbuf)) & le16_to_cpu(_ORDER_)) != 0)
 
+#define ACT_CAT_VENDOR				0x7F/* 127 */
 
 /**
  * struct rtw_ieee80211_bar - HT Block Ack Request
@@ -934,6 +939,7 @@ typedef enum _HT_CAP_AMPDU_FACTOR {
 }HT_CAP_AMPDU_FACTOR;
 
 /* 802.11n HT capabilities masks */
+#define IEEE80211_HT_CAP_LDPC_CODING		0x0001
 #define IEEE80211_HT_CAP_SUP_WIDTH		0x0002
 #define IEEE80211_HT_CAP_SM_PS			0x000C
 #define IEEE80211_HT_CAP_GRN_FLD		0x0010
@@ -958,6 +964,11 @@ typedef enum _HT_CAP_AMPDU_FACTOR {
 #define IEEE80211_HT_CAP_MCS_TX_RX_DIFF		0x02
 #define IEEE80211_HT_CAP_MCS_TX_STREAMS		0x0C
 #define IEEE80211_HT_CAP_MCS_TX_UEQM		0x10
+/* 802.11n HT capability TXBF capability */
+#define IEEE80211_HT_CAP_TXBF_RX_NDP		0x00000008
+#define IEEE80211_HT_CAP_TXBF_TX_NDP		0x00000010
+#define IEEE80211_HT_CAP_TXBF_EXPLICIT_COMP_STEERING_CAP	0x00000400
+
 /* 802.11n HT IE masks */
 #define IEEE80211_HT_IE_CHA_SEC_OFFSET		0x03
 #define IEEE80211_HT_IE_CHA_SEC_NONE	 	0x00

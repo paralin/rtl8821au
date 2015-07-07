@@ -65,7 +65,7 @@ typedef enum _RTL8188E_H2C_CMD_ID
 	//Class DM
 	H2C_DM_MACID_CFG				=0x40,
 	H2C_DM_TXBF					=0x41,
-
+	H2C_RSSI_REPORT 				=0x42,
 	//Class BT
 	H2C_BT_COEX_MASK				=0x60,
 	H2C_BT_COEX_GPIO_MODE		=0x61,
@@ -142,9 +142,11 @@ typedef struct _RSVDPAGE_LOC_88E {
 void rtl8188e_set_FwPwrMode_cmd(PADAPTER padapter, u8 Mode);
 void rtl8188e_set_FwJoinBssReport_cmd(PADAPTER padapter, u8 mstatus);
 u8 rtl8188e_set_rssi_cmd(PADAPTER padapter, u8 *param);
-u8 rtl8188e_set_raid_cmd(PADAPTER padapter, u32 mask);
+u8 rtl8188e_set_raid_cmd(_adapter*padapter, u32 bitmap, u8* arg);
 void rtl8188e_Add_RateATid(PADAPTER padapter, u32 bitmap, u8* arg, u8 rssi_level);
+s32 FillH2CCmd_88E(PADAPTER padapter, u8 ElementID, u32 CmdLen, u8 *pCmdBuffer);
 //u8 rtl8192c_set_FwSelectSuspend_cmd(PADAPTER padapter, u8 bfwpoll, u16 period);
+u8 GetTxBufferRsvdPageNum8188E(_adapter *padapter, bool wowlan);
 
 
 #ifdef CONFIG_P2P
@@ -233,12 +235,13 @@ void SetFwRelatedForWoWLAN8188ES(_adapter* padapter, u8 bHostIsGoingtoSleep);
 //---------------------------------------------------------------------------------------------------------//
 //----------------------------------    H2C CMD CONTENT    --------------------------------------------------//
 //---------------------------------------------------------------------------------------------------------//
+//
+/* move to hal_com_h2c.h
 //_RSVDPAGE_LOC_CMD_0x00
 #define SET_8188E_H2CCMD_RSVDPAGE_LOC_PROBE_RSP(__pH2CCmd, __Value)     SET_BITS_TO_LE_1BYTE(__pH2CCmd, 0, 8, __Value)
 #define SET_8188E_H2CCMD_RSVDPAGE_LOC_PSPOLL(__pH2CCmd, __Value)            SET_BITS_TO_LE_1BYTE((__pH2CCmd)+1, 0, 8, __Value)
 #define SET_8188E_H2CCMD_RSVDPAGE_LOC_NULL_DATA(__pH2CCmd, __Value)     SET_BITS_TO_LE_1BYTE((__pH2CCmd)+2, 0, 8, __Value)
 #define SET_8188E_H2CCMD_RSVDPAGE_LOC_QOS_NULL_DATA(__pH2CCmd, __Value)     SET_BITS_TO_LE_1BYTE((__pH2CCmd)+3, 0, 8, __Value)
-/* move to hal_com_h2c.h
 // AOAC_RSVDPAGE_LOC_0x83
 #define SET_8188E_H2CCMD_AOAC_RSVDPAGE_LOC_REMOTE_WAKE_CTRL_INFO(__pH2CCmd, __Value)        SET_BITS_TO_LE_1BYTE((__pH2CCmd), 0, 8, __Value)
 #define SET_8188E_H2CCMD_AOAC_RSVDPAGE_LOC_ARP_RSP(__pH2CCmd, __Value)                  SET_BITS_TO_LE_1BYTE((__pH2CCmd)+1, 0, 8, __Value)

@@ -59,6 +59,18 @@ enum _EFUSE_DEF_TYPE {
 
 #define		EFUSE_REPEAT_THRESHOLD_			3
 
+#define IS_MASKED_MP(ic, txt, offset) (EFUSE_IsAddressMasked_MP_##ic##txt(offset))
+#define IS_MASKED_TC(ic, txt, offset) (EFUSE_IsAddressMasked_TC_##ic##txt(offset))
+#define GET_MASK_ARRAY_LEN_MP(ic, txt) (EFUSE_GetArrayLen_MP_##ic##txt())
+#define GET_MASK_ARRAY_LEN_TC(ic, txt) (EFUSE_GetArrayLen_TC_##ic##txt())
+#define GET_MASK_ARRAY_MP(ic, txt, offset) (EFUSE_GetMaskArray_MP_##ic##txt(offset))
+#define GET_MASK_ARRAY_TC(ic, txt, offset) (EFUSE_GetMaskArray_TC_##ic##txt(offset))
+
+
+#define IS_MASKED(ic, txt, offset) ( IS_MASKED_MP(ic,txt, offset) )
+#define GET_MASK_ARRAY_LEN(ic, txt) ( GET_MASK_ARRAY_LEN_MP(ic,txt) )
+#define GET_MASK_ARRAY(ic, txt, out) do { GET_MASK_ARRAY_MP(ic,txt, out);} while(0)
+
 //=============================================
 //	The following is for BT Efuse definition
 //=============================================
@@ -97,6 +109,7 @@ typedef struct _EFUSE_HAL{
 	u8	fakeBTEfuseModifiedMap[EFUSE_BT_MAX_MAP_LEN];
 }EFUSE_HAL, *PEFUSE_HAL;
 
+extern u8 maskfileBuffer[32];
 
 /*------------------------Export global variable----------------------------*/
 extern u8 fakeEfuseBank;
@@ -143,6 +156,7 @@ void	EFUSE_ShadowMapUpdate(PADAPTER pAdapter, u8 efuseType, BOOLEAN bPseudoTest)
 void	EFUSE_ShadowRead(PADAPTER pAdapter, u8 Type, u16 Offset, u32 *Value);
 void Rtw_Hal_ReadMACAddrFromFile(PADAPTER padapter);
 u32 Rtw_Hal_readPGDataFromConfigFile(PADAPTER	padapter);
+u8 rtw_efuse_file_read(PADAPTER padapter,u8 *filepatch,u8 *buf, u32 len);
 
 #endif
 

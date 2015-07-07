@@ -207,13 +207,13 @@ enum NETWORK_TYPE
 	//Type for registry default wireless mode
 	WIRELESS_11AGN = (WIRELESS_11A|WIRELESS_11G|WIRELESS_11_24N|WIRELESS_11_5N), // tx: ofdm & MCS, rx: ofdm & MCS, hw: ofdm only
 	WIRELESS_11ABGN = (WIRELESS_11A|WIRELESS_11B|WIRELESS_11G|WIRELESS_11_24N|WIRELESS_11_5N),
-	WIRELESS_MODE_24G = (WIRELESS_11B|WIRELESS_11G|WIRELESS_11_24N|WIRELESS_11AC),
+	WIRELESS_MODE_24G = (WIRELESS_11B|WIRELESS_11G|WIRELESS_11_24N),
 	WIRELESS_MODE_5G = (WIRELESS_11A|WIRELESS_11_5N|WIRELESS_11AC),
 	WIRELESS_MODE_MAX = (WIRELESS_11A|WIRELESS_11B|WIRELESS_11G|WIRELESS_11_24N|WIRELESS_11_5N|WIRELESS_11AC),
 };
 
-#define SUPPORTED_24G_NETTYPE_MSK (WIRELESS_11B | WIRELESS_11G | WIRELESS_11_24N)
-#define SUPPORTED_5G_NETTYPE_MSK (WIRELESS_11A | WIRELESS_11_5N)
+#define SUPPORTED_24G_NETTYPE_MSK WIRELESS_MODE_24G
+#define SUPPORTED_5G_NETTYPE_MSK WIRELESS_MODE_5G 
 
 #define IsLegacyOnly(NetType)  ((NetType) == ((NetType) & (WIRELESS_11BG|WIRELESS_11A)))
 
@@ -1342,7 +1342,7 @@ typedef struct tx_pending_t{
 
 
 
-#define MAXTID	16
+#define TID_NUM	16
 
 #define IEEE_A            (1<<0)
 #define IEEE_B            (1<<1)
@@ -1444,15 +1444,14 @@ enum rtw_ieee80211_back_actioncode {
 
 /* HT features action code */
 enum rtw_ieee80211_ht_actioncode {
-	RTW_WLAN_ACTION_NOTIFY_CH_WIDTH = 0,
-       RTW_WLAN_ACTION_SM_PS = 1,
-       RTW_WLAN_ACTION_PSPM = 2,
-       RTW_WLAN_ACTION_PCO_PHASE = 3,
-       RTW_WLAN_ACTION_MIMO_CSI_MX = 4,
-       RTW_WLAN_ACTION_MIMO_NONCP_BF = 5,
-       RTW_WLAN_ACTION_MIMP_CP_BF = 6,
-       RTW_WLAN_ACTION_ASEL_INDICATES_FB = 7,
-       RTW_WLAN_ACTION_HI_INFO_EXCHG = 8,
+	RTW_WLAN_ACTION_HT_NOTI_CHNL_WIDTH = 0,
+       RTW_WLAN_ACTION_HT_SM_PS = 1,
+       RTW_WLAN_ACTION_HT_PSMP = 2,
+       RTW_WLAN_ACTION_HT_SET_PCO_PHASE = 3,
+       RTW_WLAN_ACTION_HT_CSI = 4,
+       RTW_WLAN_ACTION_HT_NON_COMPRESS_BEAMFORMING = 5,
+       RTW_WLAN_ACTION_HT_COMPRESS_BEAMFORMING = 6,
+       RTW_WLAN_ACTION_HT_ASEL_FEEDBACK = 7,
 };
 
 /* BACK (block-ack) parties */
@@ -1672,13 +1671,18 @@ u8 *rtw_get_wps_attr_content(u8 *wps_ie, uint wps_ielen, u16 target_attr_id ,u8 
 #define for_each_ie(ie, buf, buf_len) \
 	for (ie = (void*)buf; (((u8*)ie) - ((u8*)buf) + 1) < buf_len; ie = (void*)(((u8*)ie) + *(((u8*)ie)+1) + 2))
 
-void dump_ies(u8 *buf, u32 buf_len);
-void dump_wps_ie(u8 *ie, u32 ie_len);
+void dump_ies(void *sel, u8 *buf, u32 buf_len);
+	
+#ifdef CONFIG_80211N_HT
+void dump_ht_cap_ie_content(void *sel, u8 *buf, u32 buf_len);
+#endif
+
+void dump_wps_ie(void *sel, u8 *ie, u32 ie_len);
 
 #ifdef CONFIG_P2P
 u32 rtw_get_p2p_merged_ies_len(u8 *in_ie, u32 in_len);
 int rtw_p2p_merge_ies(u8 *in_ie, u32 in_len, u8 *merge_ie);
-void dump_p2p_ie(u8 *ie, u32 ie_len);
+void dump_p2p_ie(void *sel, u8 *ie, u32 ie_len);
 u8 *rtw_get_p2p_ie(u8 *in_ie, int in_len, u8 *p2p_ie, uint *p2p_ielen);
 u8 *rtw_get_p2p_ie_from_scan_queue(u8 *in_ie, int in_len, u8 *p2p_ie, uint *p2p_ielen, u8 frame_type);
 u8 *rtw_get_p2p_attr(u8 *p2p_ie, uint p2p_ielen, u8 target_attr_id ,u8 *buf_attr, u32 *len_attr);
@@ -1688,7 +1692,7 @@ void rtw_WLAN_BSSID_EX_remove_p2p_attr(WLAN_BSSID_EX *bss_ex, u8 attr_id);
 #endif
 
 #ifdef CONFIG_WFD
-void dump_wfd_ie(u8 *ie, u32 ie_len);
+void dump_wfd_ie(void *sel, u8 *ie, u32 ie_len);
 int rtw_get_wfd_ie(u8 *in_ie, int in_len, u8 *wfd_ie, uint *wfd_ielen);
 int rtw_get_wfd_ie_from_scan_queue(u8 *in_ie, int in_len, u8 *p2p_ie, uint *p2p_ielen, u8 frame_type);
 int rtw_get_wfd_attr_content(u8 *wfd_ie, uint wfd_ielen, u8 target_attr_id ,u8 *attr_content, uint *attr_contentlen);

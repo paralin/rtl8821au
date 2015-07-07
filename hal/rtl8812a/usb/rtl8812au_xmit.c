@@ -156,7 +156,7 @@ static s32 update_txdesc(struct xmit_frame *pxmitframe, u8 *pmem, s32 sz ,u8 bag
 				SET_TX_DESC_AGG_ENABLE_8812(ptxdesc, 1);
 				SET_TX_DESC_MAX_AGG_NUM_8812(ptxdesc, 0x1f);
 				// Set A-MPDU aggregation.
-				SET_TX_DESC_AMPDU_DENSITY_8812(ptxdesc, pHalData->AMPDUDensity);
+				SET_TX_DESC_AMPDU_DENSITY_8812(ptxdesc, pattrib->ampdu_spacing);
 			} else {
 				SET_TX_DESC_AGG_BREAK_8812(ptxdesc, 1);
 			}
@@ -181,7 +181,8 @@ static s32 update_txdesc(struct xmit_frame *pxmitframe, u8 *pmem, s32 sz ,u8 bag
 					SET_TX_DESC_DATA_SHORT_8812(ptxdesc, 	1);
 
 				SET_TX_DESC_TX_RATE_8812(ptxdesc, (padapter->fix_rate & 0x7F));
-				SET_TX_DESC_DISABLE_FB_8812(ptxdesc,1);
+				if (!padapter->data_fb)
+					SET_TX_DESC_DISABLE_FB_8812(ptxdesc,1);
 			}
 
 			if (pattrib->ldpc)
@@ -207,6 +208,17 @@ static s32 update_txdesc(struct xmit_frame *pxmitframe, u8 *pmem, s32 sz ,u8 bag
 			SET_TX_DESC_TX_RATE_8812(ptxdesc, MRateToHwRate(pmlmeext->tx_rate));
 		}
 
+#ifdef CONFIG_TDLS
+#ifdef CONFIG_XMIT_ACK
+		/* CCX-TXRPT ack for xmit mgmt frames. */
+		if (pxmitframe->ack_report) {
+			SET_TX_DESC_SPE_RPT_8812(ptxdesc, 1);
+			#ifdef DBG_CCX
+			DBG_871X("%s set tx report\n", __func__);
+			#endif
+		}
+#endif /* CONFIG_XMIT_ACK */
+#endif
 	}
 	else if((pxmitframe->frame_tag&0x0f)== MGNT_FRAMETAG)
 	{
@@ -214,14 +226,6 @@ static s32 update_txdesc(struct xmit_frame *pxmitframe, u8 *pmem, s32 sz ,u8 bag
 
 		if(IS_HARDWARE_TYPE_8821(padapter))
 			SET_TX_DESC_MBSSID_8821(ptxdesc, pattrib->mbssid);
-
-		//offset 20
-		SET_TX_DESC_RETRY_LIMIT_ENABLE_8812(ptxdesc, 1);
-		if (pattrib->retry_ctrl == _TRUE) {
-			SET_TX_DESC_DATA_RETRY_LIMIT_8812(ptxdesc, 6);
-		} else {
-			SET_TX_DESC_DATA_RETRY_LIMIT_8812(ptxdesc, 12);
-		}
 
 		SET_TX_DESC_USE_RATE_8812(ptxdesc, 1);
 
@@ -233,7 +237,39 @@ static s32 update_txdesc(struct xmit_frame *pxmitframe, u8 *pmem, s32 sz ,u8 bag
 		else
 #endif
 		{
-			SET_TX_DESC_TX_RATE_8812(ptxdesc, MRateToHwRate(pmlmeext->tx_rate));
+			SET_TX_DESC_TX_RATE_8812(ptxdesc, MRateToHwRate(pattrib->rate));
+		}
+
+		// VHT NDPA or HT NDPA Packet for Beamformer.
+		if((pattrib->subtype == WIFI_NDPA) || 
+			((pattrib->subtype == WIFI_ACTION_NOACK) && (pattrib->order == 1)))
+		{
+			SET_TX_DESC_NAV_USE_HDR_8812(ptxdesc, 1);
+
+			SET_TX_DESC_DATA_BW_8812(ptxdesc, BWMapping_8812(padapter,pattrib));
+			SET_TX_DESC_RTS_SC_8812(ptxdesc, SCMapping_8812(padapter,pattrib));
+
+			SET_TX_DESC_RETRY_LIMIT_ENABLE_8812(ptxdesc, 1);
+			SET_TX_DESC_DATA_RETRY_LIMIT_8812(ptxdesc, 5);
+			SET_TX_DESC_DISABLE_FB_8812(ptxdesc, 1);
+
+			//if(pattrib->rts_cca)
+			//{
+			//	SET_TX_DESC_NDPA_8812(ptxdesc, 2);
+			//}	
+			//else
+			{
+				SET_TX_DESC_NDPA_8812(ptxdesc, 1);
+			}
+		}
+		else
+		{
+			SET_TX_DESC_RETRY_LIMIT_ENABLE_8812(ptxdesc, 1);
+			if (pattrib->retry_ctrl == _TRUE) {
+				SET_TX_DESC_DATA_RETRY_LIMIT_8812(ptxdesc, 6);
+			} else {
+				SET_TX_DESC_DATA_RETRY_LIMIT_8812(ptxdesc, 12);
+			}
 		}
 
 #ifdef CONFIG_XMIT_ACK
@@ -550,6 +586,8 @@ s32 rtl8812au_xmitframe_complete(_adapter *padapter, struct xmit_priv *pxmitpriv
 	bulkPtr = bulkSize;
 	if (pbuf < bulkPtr)
 		descCount++;
+		if (descCount == pHalData->UsbTxAggDescNum)
+			goto agg_end;
 	else {
 		descCount = 0;
 		bulkPtr = ((pbuf / bulkSize) + 1) * bulkSize; // round to next bulkSize
@@ -597,6 +635,9 @@ s32 rtl8812au_xmitframe_complete(_adapter *padapter, struct xmit_priv *pxmitpriv
 		pxmitframe = LIST_CONTAINOR(xmitframe_plist, struct xmit_frame, list);
 		xmitframe_plist = get_next(xmitframe_plist);
 
+		if(_FAIL == rtw_hal_busagg_qsel_check(padapter,pfirstframe->attrib.qsel,pxmitframe->attrib.qsel))
+			break;
+		
              pxmitframe->agg_num = 0; // not first frame of aggregation
 		#ifdef CONFIG_TX_EARLY_MODE
 		pxmitframe->pkt_offset = 1;// not first frame of aggregation,reserve offset for EM Info
@@ -686,6 +727,7 @@ s32 rtl8812au_xmitframe_complete(_adapter *padapter, struct xmit_priv *pxmitpriv
 		rtw_list_delete(&ptxservq->tx_pending);
 
 	_exit_critical_bh(&pxmitpriv->lock, &irqL);
+agg_end:
 #ifdef CONFIG_80211N_HT
 	if ((pfirstframe->attrib.ether_type != 0x0806) &&
 	    (pfirstframe->attrib.ether_type != 0x888e) &&

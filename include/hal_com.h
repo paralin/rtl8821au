@@ -34,14 +34,14 @@
 //	Rate
 //-----------------------------------------------------------
 // CCK Rates, TxHT = 0
-#define DESC_RATE1M				0x00
-#define DESC_RATE2M				0x01
+#define DESC_RATE1M					0x00
+#define DESC_RATE2M					0x01
 #define DESC_RATE5_5M				0x02
 #define DESC_RATE11M				0x03
 
 // OFDM Rates, TxHT = 0
-#define DESC_RATE6M				0x04
-#define DESC_RATE9M				0x05
+#define DESC_RATE6M					0x04
+#define DESC_RATE9M					0x05
 #define DESC_RATE12M				0x06
 #define DESC_RATE18M				0x07
 #define DESC_RATE24M				0x08
@@ -123,6 +123,57 @@
 #define DESC_RATEVHTSS4MCS8		0x52
 #define DESC_RATEVHTSS4MCS9		0x53
 
+#define HDATA_RATE(rate)\
+(rate==DESC_RATE1M)?"CCK_1M":\
+(rate==DESC_RATE2M)?"CCK_2M":\
+(rate==DESC_RATE5_5M)?"CCK5_5M":\
+(rate==DESC_RATE11M)?"CCK_11M":\
+(rate==DESC_RATE6M)?"OFDM_6M":\
+(rate==DESC_RATE9M)?"OFDM_9M":\
+(rate==DESC_RATE12M)?"OFDM_12M":\
+(rate==DESC_RATE18M)?"OFDM_18M":\
+(rate==DESC_RATE24M)?"OFDM_24M":\
+(rate==DESC_RATE36M)?"OFDM_36M":\
+(rate==DESC_RATE48M)?"OFDM_48M":\
+(rate==DESC_RATE54M)?"OFDM_54M":\
+(rate==DESC_RATEMCS0)?"MCS0":\
+(rate==DESC_RATEMCS1)?"MCS1":\
+(rate==DESC_RATEMCS2)?"MCS2":\
+(rate==DESC_RATEMCS3)?"MCS3":\
+(rate==DESC_RATEMCS4)?"MCS4":\
+(rate==DESC_RATEMCS5)?"MCS5":\
+(rate==DESC_RATEMCS6)?"MCS6":\
+(rate==DESC_RATEMCS7)?"MCS7":\
+(rate==DESC_RATEMCS8)?"MCS8":\
+(rate==DESC_RATEMCS9)?"MCS9":\
+(rate==DESC_RATEMCS10)?"MCS10":\
+(rate==DESC_RATEMCS11)?"MCS11":\
+(rate==DESC_RATEMCS12)?"MCS12":\
+(rate==DESC_RATEMCS13)?"MCS13":\
+(rate==DESC_RATEMCS14)?"MCS14":\
+(rate==DESC_RATEMCS15)?"MCS15":\
+(rate==DESC_RATEVHTSS1MCS0)?"VHTSS1MCS0":\
+(rate==DESC_RATEVHTSS1MCS1)?"VHTSS1MCS1":\
+(rate==DESC_RATEVHTSS1MCS2)?"VHTSS1MCS2":\
+(rate==DESC_RATEVHTSS1MCS3)?"VHTSS1MCS3":\
+(rate==DESC_RATEVHTSS1MCS4)?"VHTSS1MCS4":\
+(rate==DESC_RATEVHTSS1MCS5)?"VHTSS1MCS5":\
+(rate==DESC_RATEVHTSS1MCS6)?"VHTSS1MCS6":\
+(rate==DESC_RATEVHTSS1MCS7)?"VHTSS1MCS7":\
+(rate==DESC_RATEVHTSS1MCS8)?"VHTSS1MCS8":\
+(rate==DESC_RATEVHTSS1MCS9)?"VHTSS1MCS9":\
+(rate==DESC_RATEVHTSS2MCS0)?"VHTSS2MCS0":\
+(rate==DESC_RATEVHTSS2MCS1)?"VHTSS2MCS1":\
+(rate==DESC_RATEVHTSS2MCS2)?"VHTSS2MCS2":\
+(rate==DESC_RATEVHTSS2MCS3)?"VHTSS2MCS3":\
+(rate==DESC_RATEVHTSS2MCS4)?"VHTSS2MCS4":\
+(rate==DESC_RATEVHTSS2MCS5)?"VHTSS2MCS5":\
+(rate==DESC_RATEVHTSS2MCS6)?"VHTSS2MCS6":\
+(rate==DESC_RATEVHTSS2MCS7)?"VHTSS2MCS7":\
+(rate==DESC_RATEVHTSS2MCS8)?"VHTSS2MCS8":\
+(rate==DESC_RATEVHTSS2MCS9)?"VHTSS2MCS9":"UNKNOW"
+
+
 enum{
 	UP_LINK,
 	DOWN_LINK,	
@@ -138,6 +189,17 @@ typedef enum _FIRMWARE_SOURCE {
 	FW_SOURCE_HEADER_FILE = 1,		//from header file
 } FIRMWARE_SOURCE, *PFIRMWARE_SOURCE;
 
+//
+// Queue Select Value in TxDesc
+//
+#define QSLT_BK							0x2//0x01
+#define QSLT_BE							0x0
+#define QSLT_VI							0x5//0x4
+#define QSLT_VO							0x7//0x6
+#define QSLT_BEACON						0x10
+#define QSLT_HIGH						0x11
+#define QSLT_MGNT						0x12
+#define QSLT_CMD						0x13
 
 // BK, BE, VI, VO, HCCA, MANAGEMENT, COMMAND, HIGH, BEACON.
 //#define MAX_TX_QUEUE		9
@@ -152,6 +214,32 @@ typedef enum _FIRMWARE_SOURCE {
 #define PageNum_512(_Len)		(u32)(((_Len)>>9) + ((_Len)&0x1FF ? 1:0))
 #define PageNum(_Len, _Size)		(u32)(((_Len)/(_Size)) + ((_Len)&((_Size) - 1) ? 1:0))
 
+struct dbg_rx_counter
+{
+	u32	rx_pkt_ok;
+	u32	rx_pkt_crc_error;
+	u32	rx_pkt_drop;	
+	u32	rx_ofdm_fa;
+	u32	rx_cck_fa;
+	u32	rx_ht_fa;
+};
+void rtw_dump_mac_rx_counters(_adapter* padapter,struct dbg_rx_counter *rx_counter);
+void rtw_dump_phy_rx_counters(_adapter* padapter,struct dbg_rx_counter *rx_counter);
+void rtw_reset_mac_rx_counters(_adapter* padapter);
+void rtw_reset_phy_rx_counters(_adapter* padapter);
+
+#ifdef DBG_RX_COUNTER_DUMP
+#define DUMP_DRV_RX_COUNTER	BIT0
+#define DUMP_MAC_RX_COUNTER	BIT1
+#define DUMP_PHY_RX_COUNTER	BIT2
+#define DUMP_DRV_TRX_COUNTER_DATA	BIT3
+
+void rtw_dump_phy_rxcnts_preprocess(_adapter* padapter,u8 rx_cnt_mode);
+void rtw_dump_rx_counters(_adapter* padapter);
+#endif
+
+u8 rtw_hal_data_init(_adapter *padapter);
+void rtw_hal_data_deinit(_adapter *padapter);
 
 void dump_chip_info(HAL_VERSION	ChipVersion);
 
@@ -201,6 +289,7 @@ void hw_var_port_switch(_adapter *adapter);
 
 void SetHwReg(PADAPTER padapter, u8 variable, u8 *val);
 void GetHwReg(PADAPTER padapter, u8 variable, u8 *val);
+void rtw_hal_check_rxfifo_full(_adapter *adapter);
 
 u8 SetHalDefVar(_adapter *adapter, HAL_DEF_VARIABLE variable, void *value);
 u8 GetHalDefVar(_adapter *adapter, HAL_DEF_VARIABLE variable, void *value);
@@ -263,5 +352,75 @@ isAllSpaceOrTab(
 	u8	size
 	);
 
+void linked_info_dump(_adapter *padapter,u8 benable);
+#ifdef DBG_RX_SIGNAL_DISPLAY_RAW_DATA
+void rtw_get_raw_rssi_info(void *sel, _adapter *padapter);
+void rtw_store_phy_info(_adapter *padapter, union recv_frame *prframe);
+void rtw_dump_raw_rssi_info(_adapter *padapter);
+#endif
+
+#define		HWSET_MAX_SIZE			512
+#ifdef CONFIG_EFUSE_CONFIG_FILE
+#define		EFUSE_FILE_COLUMN_NUM		16
+u32 Hal_readPGDataFromConfigFile(PADAPTER padapter, struct file *fp);
+void Hal_ReadMACAddrFromFile(PADAPTER padapter, struct file *fp);
+void Hal_GetPhyEfuseMACAddr(PADAPTER padapter, u8* mac_addr);
+int check_phy_efuse_tx_power_info_valid(PADAPTER padapter);
+int check_phy_efuse_macaddr_info_valid(PADAPTER padapter);
+#endif //CONFIG_EFUSE_CONFIG_FILE
+
+#ifdef CONFIG_RF_GAIN_OFFSET
+void rtw_bb_rf_gain_offset(_adapter *padapter);
+#endif //CONFIG_RF_GAIN_OFFSET
+
+void dm_DynamicUsbTxAgg(_adapter *padapter, u8 from_timer);
+u8 rtw_hal_busagg_qsel_check(_adapter *padapter,u8 pre_qsel,u8 next_qsel);
+void GetHalODMVar(	
+	PADAPTER				Adapter,
+	HAL_ODM_VARIABLE		eVariable,
+	PVOID					pValue1,
+	PVOID					pValue2);
+void SetHalODMVar(
+	PADAPTER				Adapter,
+	HAL_ODM_VARIABLE		eVariable,
+	PVOID					pValue1,
+	BOOLEAN					bSet);
+
+#ifdef CONFIG_BACKGROUND_NOISE_MONITOR
+struct noise_info
+{
+	u8 		bPauseDIG;
+	u8 		IGIValue;
+	u32 	max_time;//ms	
+	u8		chan;
+};
+#endif
+void rtw_get_noise(_adapter* padapter);
+
+void rtw_hal_set_fw_rsvd_page(_adapter* adapter, bool finished);
+
+#ifdef CONFIG_GPIO_API
+u8 rtw_hal_get_gpio(_adapter* adapter, u8 gpio_num);
+int rtw_hal_set_gpio_output_value(_adapter* adapter, u8 gpio_num, bool isHigh);
+int rtw_hal_config_gpio(_adapter* adapter, u8 gpio_num, bool isOutput);
+int rtw_hal_register_gpio_interrupt(_adapter* adapter, int gpio_num, void(*callback)(u8 level));
+int rtw_hal_disable_gpio_interrupt(_adapter* adapter, int gpio_num);
+#endif
+
+#ifdef CONFIG_LOAD_PHY_PARA_FROM_FILE
+extern char *rtw_phy_file_path;
+extern char file_path[PATH_LENGTH_MAX];
+#define GetLineFromBuffer(buffer)   strsep(&buffer, "\n")
+#endif
+
+#ifdef CONFIG_FW_C2H_DEBUG
+void Debug_FwC2H(PADAPTER padapter, u8 *pdata, u8 len);
+#endif
+/*CONFIG_FW_C2H_DEBUG*/
+
+
 #endif //__HAL_COMMON_H__
+
+
+
 

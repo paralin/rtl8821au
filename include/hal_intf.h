@@ -65,6 +65,7 @@ typedef enum _HW_VARIABLES{
 	HW_VAR_RESP_SIFS,
 	HW_VAR_ACK_PREAMBLE,
 	HW_VAR_SEC_CFG,
+	HW_VAR_SEC_DK_CFG,
 	HW_VAR_BCN_VALID,
 	HW_VAR_RF_TYPE,
 	HW_VAR_DM_FLAG,
@@ -91,9 +92,7 @@ typedef enum _HW_VARIABLES{
 	HW_VAR_FWLPS_RF_ON,
 	HW_VAR_H2C_FW_P2P_PS_OFFLOAD,
 	HW_VAR_TDLS_WRCR,
-	HW_VAR_TDLS_INIT_CH_SEN,
 	HW_VAR_TDLS_RS_RCR,
-	HW_VAR_TDLS_DONE_CH_SEN,
 	HW_VAR_INITIAL_GAIN,
 	HW_VAR_TRIGGER_GPIO_0,
 	HW_VAR_BT_SET_COEXIST,
@@ -120,6 +119,9 @@ typedef enum _HW_VARIABLES{
 #ifdef CONFIG_AP_WOWLAN
 	HW_VAR_AP_WOWLAN,
 #endif
+#ifdef CONFIG_GPIO_WAKEUP
+	HW_SET_GPIO_WL_CTRL,
+#endif
 	HW_VAR_SYS_CLKR,
 	HW_VAR_NAV_UPPER,
 	HW_VAR_C2H_HANDLE,
@@ -145,6 +147,8 @@ typedef enum _HW_VARIABLES{
 	HW_VAR_DL_RSVD_PAGE,
 	HW_VAR_MACID_SLEEP,
 	HW_VAR_MACID_WAKEUP,
+	HW_VAR_DUMP_MAC_QUEUE_INFO,
+	HW_VAR_ASIX_IOT,
 }HW_VARIABLES;
 
 typedef enum _HAL_DEF_VARIABLE{
@@ -179,12 +183,16 @@ typedef enum _HAL_DEF_VARIABLE{
 	HAL_DEF_PCI_AMD_L1_SUPPORT,
 	HAL_DEF_PCI_ASPM_OSC, // Support for ASPM OSC, added by Roger, 2013.03.27.
 	HAL_DEF_MACID_SLEEP, // Support for MACID sleep
+	HAL_DEF_DBG_RX_INFO_DUMP,
+	HAL_DEF_DBG_DIS_PWT, //disable Tx power training or not.
 }HAL_DEF_VARIABLE;
 
 typedef enum _HAL_ODM_VARIABLE{
 	HAL_ODM_STA_INFO,	
 	HAL_ODM_P2P_STATE,
 	HAL_ODM_WIFI_DISPLAY_STATE,
+	HAL_ODM_NOISE_MONITOR,
+	HAL_ODM_REGULATION,
 }HAL_ODM_VARIABLE;
 
 typedef enum _HAL_INTF_PS_FUNC{
@@ -251,7 +259,7 @@ struct hal_ops {
 	u8	(*GetHalDefVarHandler)(_adapter *padapter, HAL_DEF_VARIABLE eVariable, PVOID pValue);
 	u8	(*SetHalDefVarHandler)(_adapter *padapter, HAL_DEF_VARIABLE eVariable, PVOID pValue);
 
-	void	(*GetHalODMVarHandler)(_adapter *padapter, HAL_ODM_VARIABLE eVariable, PVOID pValue1,BOOLEAN bSet);
+	void	(*GetHalODMVarHandler)(_adapter *padapter, HAL_ODM_VARIABLE eVariable, PVOID pValue1,PVOID pValue2);
 	void	(*SetHalODMVarHandler)(_adapter *padapter, HAL_ODM_VARIABLE eVariable, PVOID pValue1,BOOLEAN bSet);
 
 	void	(*UpdateRAMaskHandler)(_adapter *padapter, u32 mac_id, u8 rssi_level);
@@ -315,10 +323,16 @@ struct hal_ops {
 	void (*hal_reset_security_engine)(_adapter * adapter);
 	s32 (*c2h_handler)(_adapter *padapter, u8 *c2h_evt);
 	c2h_id_filter c2h_id_filter_ccx;
-
-#ifdef CONFIG_BT_COEXIST
 	s32 (*fill_h2c_cmd)(PADAPTER, u8 ElementID, u32 CmdLen, u8 *pCmdBuffer);
-#endif // CONFIG_BT_COEXIST
+	void (*fill_fake_txdesc)(PADAPTER, u8 *pDesc, u32 BufferLen,
+			u8 IsPsPoll, u8 IsBTQosNull, u8 bDataFrame);
+#ifdef CONFIG_WOWLAN
+	void (*hal_set_wowlan_fw)(_adapter *adapter, u8 sleep);
+#endif //CONFIG_WOWLAN
+	u8 (*hal_get_tx_buff_rsvd_page_num)(_adapter *adapter, bool wowlan);
+#ifdef CONFIG_GPIO_API
+	void (*update_hisr_hsisr_ind)(PADAPTER padapter, u32 flag);
+#endif
 };
 
 typedef	enum _RT_EEPROM_TYPE{
@@ -392,6 +406,9 @@ typedef enum _HARDWARE_TYPE{
 #define	IS_HARDWARE_TYPE_8192D(_Adapter)			\
 (IS_HARDWARE_TYPE_8192DE(_Adapter) || IS_HARDWARE_TYPE_8192DU(_Adapter))
 
+#define IS_HARDWARE_TYPE_OLDER_THAN_8723A(_Adapter)	\
+(IS_HARDWARE_TYPE_8192D(_Adapter) || IS_HARDWARE_TYPE_8192C(_Adapter))
+
 //
 // RTL8723A Series
 //
@@ -409,6 +426,11 @@ typedef enum _HARDWARE_TYPE{
 #define IS_HARDWARE_TYPE_8188ES(_Adapter)	(((PADAPTER)_Adapter)->HardwareType==HARDWARE_TYPE_RTL8188ES)
 #define	IS_HARDWARE_TYPE_8188E(_Adapter)	\
 (IS_HARDWARE_TYPE_8188EE(_Adapter) || IS_HARDWARE_TYPE_8188EU(_Adapter) || IS_HARDWARE_TYPE_8188ES(_Adapter))
+
+
+#define	IS_HARDWARE_TYPE_8188E_before(_Adapter)			\
+(IS_HARDWARE_TYPE_8192C(_Adapter) ||IS_HARDWARE_TYPE_8192D(_Adapter) ||IS_HARDWARE_TYPE_8723A(_Adapter))
+
 
 #define IS_HARDWARE_TYPE_OLDER_THAN_8812A(_Adapter)	\
 (IS_HARDWARE_TYPE_8192D(_Adapter) || IS_HARDWARE_TYPE_8192C(_Adapter) ||\
@@ -528,7 +550,7 @@ u8 rtw_hal_set_def_var(_adapter *padapter, HAL_DEF_VARIABLE eVariable, PVOID pVa
 u8 rtw_hal_get_def_var(_adapter *padapter, HAL_DEF_VARIABLE eVariable, PVOID pValue);
 
 void rtw_hal_set_odm_var(_adapter *padapter, HAL_ODM_VARIABLE eVariable, PVOID pValue1,BOOLEAN bSet);
-void	rtw_hal_get_odm_var(_adapter *padapter, HAL_ODM_VARIABLE eVariable, PVOID pValue1,BOOLEAN bSet);
+void	rtw_hal_get_odm_var(_adapter *padapter, HAL_ODM_VARIABLE eVariable, PVOID pValue1,PVOID pValue2);
 	
 void rtw_hal_enable_interrupt(_adapter *padapter);
 void rtw_hal_disable_interrupt(_adapter *padapter);
@@ -621,12 +643,12 @@ c2h_id_filter rtw_hal_c2h_id_filter_ccx(_adapter *adapter);
 
 s32 rtw_hal_is_disable_sw_channel_plan(PADAPTER padapter);
 
-s32 rtw_hal_macid_sleep(PADAPTER padapter, u32 macid);
-s32 rtw_hal_macid_wakeup(PADAPTER padapter, u32 macid);
+s32 rtw_hal_macid_sleep(PADAPTER padapter, u8 macid);
+s32 rtw_hal_macid_wakeup(PADAPTER padapter, u8 macid);
 
-#ifdef CONFIG_BT_COEXIST
 s32 rtw_hal_fill_h2c_cmd(PADAPTER, u8 ElementID, u32 CmdLen, u8 *pCmdBuffer);
-#endif // CONFIG_BT_COEXIST
-
+#ifdef CONFIG_GPIO_API
+void rtw_hal_update_hisr_hsisr_ind(_adapter *padapter, u32 flag);
+#endif
 #endif //__HAL_INTF_H__
 

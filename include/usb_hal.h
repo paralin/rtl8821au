@@ -20,6 +20,9 @@
 #ifndef __USB_HAL_H__
 #define __USB_HAL_H__
 
+int usb_init_recv_priv(_adapter *padapter, u16 ini_in_buf_sz);
+void usb_free_recv_priv (_adapter *padapter, u16 ini_in_buf_sz);
+
 void rtw_set_hal_ops(_adapter *padapter);
 
 #ifdef CONFIG_RTL8192C

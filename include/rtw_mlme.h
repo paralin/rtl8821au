@@ -30,6 +30,10 @@
 //	Increase the scanning timeout because of increasing the SURVEY_TO value.
 
 #define 	SCANNING_TIMEOUT 	8000
+#ifdef CONFIG_STA_MODE_SCAN_UNDER_AP_MODE
+#define		CONC_SCANNING_TIMEOUT_SINGLE_BAND 10000
+#define		CONC_SCANNING_TIMEOUT_DUAL_BAND 15000
+#endif //CONFIG_STA_MODE_SCAN_UNDER_AP_MODE
 
 #ifdef PALTFORM_OS_WINCE
 #define	SCANQUEUE_LIFETIME 12000000 // unit:us
@@ -60,6 +64,7 @@
 #define	WIFI_AUTOCONF			0x00004000
 #define	WIFI_AUTOCONF_IND	0x00008000
 #endif
+#define WIFI_MONITOR_STATE 0x80000000
 
 /*
 // ========== P2P Section Start ===============
@@ -254,11 +259,32 @@ struct cfg80211_wifidirect_info{
 	struct ieee80211_channel	remain_on_ch_channel;
 	enum nl80211_channel_type	remain_on_ch_type;
 	u64						remain_on_ch_cookie;
+	bool not_indic_ro_ch_exp;
 	bool is_ro_ch;
 	u32 last_ro_ch_time; /* this will be updated at the beginning and end of ro_ch */
-	u8						chk_invite_ch_list;
 };
 #endif //CONFIG_IOCTL_CFG80211
+
+#ifdef CONFIG_P2P_WOWLAN
+
+enum P2P_WOWLAN_RECV_FRAME_TYPE
+{
+	P2P_WOWLAN_RECV_NEGO_REQ = 0,
+	P2P_WOWLAN_RECV_INVITE_REQ = 1,
+	P2P_WOWLAN_RECV_PROVISION_REQ = 2,
+};
+
+struct p2p_wowlan_info{
+
+	u8 						is_trigger;
+	enum P2P_WOWLAN_RECV_FRAME_TYPE	wowlan_recv_frame_type;
+	u8 						wowlan_peer_addr[ETH_ALEN];
+	u16						wowlan_peer_wpsconfig;
+	u8						wowlan_peer_is_persistent;
+	u8						wowlan_peer_invitation_type;
+};
+
+#endif //CONFIG_P2P_WOWLAN
 
 struct wifidirect_info{
 	_adapter*				padapter;
@@ -285,6 +311,11 @@ struct wifidirect_info{
 #ifdef CONFIG_WFD
 	struct wifi_display_info		*wfd_info;
 #endif	
+
+#ifdef CONFIG_P2P_WOWLAN
+	struct p2p_wowlan_info		p2p_wow_info;
+#endif //CONFIG_P2P_WOWLAN
+
 	enum P2P_ROLE			role;
 	enum P2P_STATE			pre_p2p_state;
 	enum P2P_STATE			p2p_state;
@@ -364,22 +395,46 @@ struct tdls_ss_record{	//signal strength record
 	u8		is_tdls_sta;	// _TRUE: direct link sta, _FALSE: else
 };
 
+struct tdls_temp_mgmt{
+	u8	initiator;	// 0: None, 1: we initiate, 2: peer initiate
+	u8	peer_addr[ETH_ALEN];
+};
+
+#ifdef CONFIG_TDLS_CH_SW
+struct tdls_ch_switch{
+	u32	ch_sw_state;
+	ATOMIC_T	chsw_on;
+	u8	addr[ETH_ALEN];
+	u8	off_ch_num;
+	u8	ch_offset;
+	u32	cur_time;
+	u8	delay_switch_back;
+	u8	dump_stack;
+};
+#endif
+
 struct tdls_info{
 	u8					ap_prohibited;
+	u8					ch_switch_prohibited;
 	u8					link_established;
 	u8					sta_cnt;
-	u8					sta_maximum;	// 1:tdls sta is equal (NUM_STA-1), reach max direct link number; 0: else;
+	u8					sta_maximum;	/* 1:tdls sta is equal (NUM_STA-1), reach max direct link number; 0: else; */
 	struct tdls_ss_record	ss_record;
+#ifdef CONFIG_TDLS_CH_SW	
+	struct tdls_ch_switch	chsw_info;
+#endif
+
 	u8					ch_sensing;
 	u8					cur_channel;
-	u8					candidate_ch;
 	u8					collect_pkt_num[MAX_CHANNEL_NUM];
 	_lock				cmd_lock;
 	_lock				hdl_lock;
 	u8					watchdog_count;
-	u8					dev_discovered;		//WFD_TDLS: for sigma test
+	u8					dev_discovered;		/* WFD_TDLS: for sigma test */
 	u8					tdls_enable;
-	u8					external_setup;	// _TRUE: setup is handled by wpa_supplicant
+
+	/* Let wpa_supplicant to setup*/
+	u8					driver_setup;
 #ifdef CONFIG_WFD
 	struct wifi_display_info		*wfd_info;
 #endif		
@@ -392,7 +447,6 @@ struct tdls_txmgmt {
 	u16 status_code;
 	u8 *buf;
 	size_t len;
-	u8 external_support;
 };
 
 /* used for mlme_priv.roam_flags */
@@ -400,6 +454,18 @@ enum {
 	RTW_ROAM_ON_EXPIRED = BIT0,
 	RTW_ROAM_ON_RESUME = BIT1,
 	RTW_ROAM_ACTIVE = BIT2,
+};
+
+struct beacon_keys {
+	u8 ssid[IW_ESSID_MAX_SIZE];
+	u32 ssid_len;
+	u8 bcn_channel;
+	u16 ht_cap_info;
+	u8 ht_info_infos_0_sco; // bit0 & bit1 in infos[0] is second channel offset
+	int encryp_protocol;
+	int pairwise_cipher;
+	int group_cipher;
+	int is_8021x;
 };
 
 struct mlme_priv {
@@ -432,6 +498,12 @@ struct mlme_priv {
 
 	struct wlan_network	cur_network;
 	struct wlan_network *cur_network_scanned;
+
+	// bcn check info
+	struct beacon_keys cur_beacon_keys; // save current beacon keys
+	struct beacon_keys new_beacon_keys; // save new beacon keys
+	u8 new_beacon_cnts; // if new_beacon_cnts >= threshold, ap beacon is changed
+
 #ifdef CONFIG_ARP_KEEP_ALIVE
 	// for arp offload keep alive
 	u8	gw_mac_addr[6];
@@ -620,7 +692,15 @@ struct mlme_priv {
 	u8	scanning_via_buddy_intf;
 #endif
 
+//	u8 	NumOfBcnInfoChkFail;
+//	u32	timeBcnInfoChkStart;
 };
+
+#define mlme_set_scan_to_timer(mlme, ms) \
+	do { \
+		/* DBG_871X("%s set_scan_to_timer(%p, %d)\n", __FUNCTION__, (mlme), (ms)); */ \
+		_set_timer(&(mlme)->scan_to_timer, (ms)); \
+	} while(0)
 
 #define rtw_mlme_set_auto_scan_int(adapter, ms) \
 	do { \
@@ -655,6 +735,7 @@ extern void rtw_stassoc_event_callback(_adapter *adapter, u8 *pbuf);
 extern void rtw_stadel_event_callback(_adapter *adapter, u8 *pbuf);
 extern void rtw_atimdone_event_callback(_adapter *adapter, u8 *pbuf);
 extern void rtw_cpwm_event_callback(_adapter *adapter, u8 *pbuf);
+extern void rtw_wmm_event_callback(PADAPTER padapter, u8 *pbuf);
 
 extern void rtw_join_timeout_handler(RTW_TIMER_HDL_ARGS);
 extern void _rtw_scan_timeout_handler(RTW_TIMER_HDL_ARGS);
