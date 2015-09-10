@@ -4407,10 +4407,10 @@ EXhalbtc8812a2ant_DisplayCoexInfo(
 	CL_PRINTF(cliBuf);	
 	
 	psTdmaCase = pCoexDm->curPsTdma;
-	CL_SPRINTF(cliBuf, BT_TMP_BUF_SIZE, "\r\n %-35s = %02x %02x %02x %02x %02x %02x case-%d (auto:%d/%d)", "PS TDMA", \
+	CL_SPRINTF(cliBuf, BT_TMP_BUF_SIZE, "\r\n %-35s = %02x %02x %02x %02x %02x case-%d (auto:%d/%d)", "PS TDMA", \
 		pCoexDm->psTdmaPara[0], pCoexDm->psTdmaPara[1],
 		pCoexDm->psTdmaPara[2], pCoexDm->psTdmaPara[3],
-		pCoexDm->psTdmaPara[4], pCoexDm->psTdmaPara[5], psTdmaCase, pCoexDm->bAutoTdmaAdjust, pCoexDm->bAutoTdmaAdjustLowRssi);
+		pCoexDm->psTdmaPara[4], psTdmaCase, pCoexDm->bAutoTdmaAdjust, pCoexDm->bAutoTdmaAdjustLowRssi);
 	CL_PRINTF(cliBuf);
 
 	CL_SPRINTF(cliBuf, BT_TMP_BUF_SIZE, "\r\n %-35s = %d/ %d ", "DecBtPwr/ IgnWlanAct", \
