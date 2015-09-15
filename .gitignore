@@ -1,8 +1,9 @@
 *.o
 *.cmd
 
-8821au.ko
-8821au.mod.c
+*.ko
+*.mod.c
+
 Module.symvers
 modules.order
 

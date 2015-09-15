@@ -1,8 +1,43 @@
-rtl8821au linux (or rtl8812au)
-==============================
+# Realtek Wireless Driver for Linux
 
-rtl8821 linux kernel driver for AC1200 (801.11ac)
-Wireless Dual-Band USB Adapter
+## Supported chipsets
+* RTL8192C
+* RTL8192D
+* RTL8723A
+* RTL8188E
+* RTL8812A (AC1200)
+* RTL8821A (AC1200)
+* RTL8192E
+* RTL8723B
+
+## How to (general)
+
+1. Select your chipset and platform in `Makefile`. For example, change
+```
+...
+CONFIG_RTL8821A = n
+...
+```
+to
+```
+...
+CONFIG_RTL8821A = y
+...
+```
+and
+```
+CONFIG_PLATFORM_I386_PC = n
+```
+to
+```
+CONFIG_PLATFORM_I386_PC = y
+```
+2. `make`
+3. If you have previously installed a wireless driver for your chipset, `sudo modprobe -r [your_chipset_name]` where `[your_chipset_name]` is `8821au` for example.
+4. `sudo make install`
+5. `sudo modprobe [your_chipset_name]`
+
+## Release notes
 
 ```
 v4.3.14_13455.20150212_BTCOEX20150128-51
@@ -16,3 +51,5 @@ Realtek release:
 7. Fix some 802.11 logo issue
 8. Fix WPS issue
 ```
+
+
