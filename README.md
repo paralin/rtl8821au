@@ -1,5 +1,9 @@
 # Realtek Wireless Driver for Linux
 
+## Alternative Repository
+
+[This repository](https://github.com/diederikdehaas/rtl8812AU) seems to contain approximately the same codebase with several different available versions. I would recommend using it as it's more actively maintained.
+
 ## Supported chipsets
 * RTL8192C
 * RTL8192D
